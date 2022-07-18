@@ -1,11 +1,11 @@
 use ed25519_dalek::{Keypair, Signer, Signature};
 use rand::thread_rng;
-use x25519_dalek::{StaticSecret, EphemeralSecret, PublicKey, SharedSecret};
+use x25519_dalek::{StaticSecret, PublicKey, SharedSecret};
 
 pub struct Account {
     signing_key: Keypair,
     diffie_hellman_key: StaticSecret,
-    one_time_keys: Vec<EphemeralSecret>,
+    one_time_keys: Vec<StaticSecret>,
     // XXX: maybe backup key later
 } 
 
@@ -15,7 +15,7 @@ impl Account {
     pub fn new() -> Self {
         let signing_key = Keypair::generate(&mut thread_rng());
         let diffie_hellman_key = StaticSecret::new(thread_rng());
-        let one_time_keys = (0..100).map(|_| EphemeralSecret::new(thread_rng())).collect();
+        let one_time_keys = (0..NUM_ONE_TIME_KEYS).map(|_| StaticSecret::new(thread_rng())).collect();
 
         Account {
             signing_key,
@@ -36,11 +36,27 @@ impl Account {
     // no because Eve is unable to calculate ECH(EPH_a, IK_b)
     // But if Eve compromises IK_b, then they can decrypt it eventually
     /// create a Session given some other user's diffie_hellman_key and one-time-key
-    pub fn create_outbound_session(&self, dh_key: PublicKey, one_time_key: PublicKey) -> [u8; 96] {
+    pub fn create_outbound_session(&self, dh_key: PublicKey, one_time_key: PublicKey) -> ([u8; 96], PublicKey) {
         let eph_key = StaticSecret::new(thread_rng());
         let dh1 = self.diffie_hellman_key.diffie_hellman(&one_time_key);
         let dh2 = eph_key.diffie_hellman(&dh_key);
         let dh3 = eph_key.diffie_hellman(&one_time_key);
+        (merge_secrets(dh1, dh2, dh3), PublicKey::from(&eph_key))
+    }
+
+    // create inbound_session
+    // needs one-time-key they used from you, their diffie-hellman key, their ephermal key
+    pub fn create_inbound_session(&self, used_otk: PublicKey, dh_key: PublicKey, eph_key: PublicKey) -> [u8; 96] {
+        // TODO: this design is very bad, probably want hashmap for the public key
+        let mut public_otks = self.one_time_keys.iter().map(|k| PublicKey::from(k));
+        // TODO: check if used_otk is even in your public key
+        // TODO: you need to delete the one_time_key LOL
+        let idx = public_otks.position(|k| k == used_otk).unwrap();
+        let otk = &self.one_time_keys[idx];
+
+        let dh1 = otk.diffie_hellman(&dh_key);
+        let dh2 = self.diffie_hellman_key.diffie_hellman(&eph_key);
+        let dh3 = otk.diffie_hellman(&eph_key);
         merge_secrets(dh1, dh2, dh3)
     }
 }
@@ -52,4 +68,26 @@ fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSe
     combined_secret[32..64].copy_from_slice(secret1.as_bytes());
     combined_secret[64..96].copy_from_slice(secret1.as_bytes());
     combined_secret
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn same_secrets() {
+        let alice = Account::new();
+        let bob = Account::new();
+
+        // alice -> bob
+        let bob_secret_otk = &bob.one_time_keys[0];
+        let bob_public_dhk = PublicKey::from(&bob.diffie_hellman_key);
+        let bob_public_otk = PublicKey::from(bob_secret_otk);
+        let (alice_ss, alice_public_eph) = alice.create_outbound_session(bob_public_dhk, bob_public_otk);
+
+        let alice_public_dhk = PublicKey::from(&alice.diffie_hellman_key);
+        let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_eph);
+
+        assert_eq!(alice_ss, bob_ss);
+    }
 }

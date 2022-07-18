@@ -46,6 +46,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "diffie"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rand",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,15 +277,6 @@ dependencies = [
  "curve25519-dalek",
  "rand_core",
  "zeroize",
-]
-
-[[package]]
-name = "x3dh"
-version = "0.1.0"
-dependencies = [
- "ed25519-dalek",
- "rand",
- "x25519-dalek",
 ]
 
 [[package]]

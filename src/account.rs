@@ -1,13 +1,13 @@
-use ed25519_dalek::{Keypair, Signer, Signature};
+use ed25519_dalek::{Keypair, Signature, Signer};
 use rand::thread_rng;
-use x25519_dalek::{StaticSecret, PublicKey, SharedSecret};
+use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 pub struct Account {
     signing_key: Keypair,
     diffie_hellman_key: StaticSecret,
     one_time_keys: Vec<StaticSecret>,
     // XXX: maybe backup key later
-} 
+}
 
 const NUM_ONE_TIME_KEYS: usize = 100;
 
@@ -15,7 +15,9 @@ impl Account {
     pub fn new() -> Self {
         let signing_key = Keypair::generate(&mut thread_rng());
         let diffie_hellman_key = StaticSecret::new(thread_rng());
-        let one_time_keys = (0..NUM_ONE_TIME_KEYS).map(|_| StaticSecret::new(thread_rng())).collect();
+        let one_time_keys = (0..NUM_ONE_TIME_KEYS)
+            .map(|_| StaticSecret::new(thread_rng()))
+            .collect();
 
         Account {
             signing_key,
@@ -27,7 +29,7 @@ impl Account {
     pub fn sign(&self, message: &str) -> Signature {
         self.signing_key.sign(message.as_bytes())
     }
-    
+
     // IK_a <-> OPK_b
     // EPH_a <-> IK_b
     // EPH_a <-> OPK_b
@@ -36,7 +38,11 @@ impl Account {
     // no because Eve is unable to calculate ECH(EPH_a, IK_b)
     // But if Eve compromises IK_b, then they can decrypt it eventually
     /// create a Session given some other user's diffie_hellman_key and one-time-key
-    pub fn create_outbound_session(&self, dh_key: PublicKey, one_time_key: PublicKey) -> ([u8; 96], PublicKey) {
+    pub fn create_outbound_session(
+        &self,
+        dh_key: PublicKey,
+        one_time_key: PublicKey,
+    ) -> ([u8; 96], PublicKey) {
         let eph_key = StaticSecret::new(thread_rng());
         let dh1 = self.diffie_hellman_key.diffie_hellman(&one_time_key);
         let dh2 = eph_key.diffie_hellman(&dh_key);
@@ -46,7 +52,12 @@ impl Account {
 
     // create inbound_session
     // needs one-time-key they used from you, their diffie-hellman key, their ephermal key
-    pub fn create_inbound_session(&self, used_otk: PublicKey, dh_key: PublicKey, eph_key: PublicKey) -> [u8; 96] {
+    pub fn create_inbound_session(
+        &self,
+        used_otk: PublicKey,
+        dh_key: PublicKey,
+        eph_key: PublicKey,
+    ) -> [u8; 96] {
         // TODO: this design is very bad, probably want hashmap for the public key
         let mut public_otks = self.one_time_keys.iter().map(|k| PublicKey::from(k));
         // TODO: check if used_otk is even in your public key
@@ -83,7 +94,8 @@ mod test {
         let bob_secret_otk = &bob.one_time_keys[0];
         let bob_public_dhk = PublicKey::from(&bob.diffie_hellman_key);
         let bob_public_otk = PublicKey::from(bob_secret_otk);
-        let (alice_ss, alice_public_eph) = alice.create_outbound_session(bob_public_dhk, bob_public_otk);
+        let (alice_ss, alice_public_eph) =
+            alice.create_outbound_session(bob_public_dhk, bob_public_otk);
 
         let alice_public_dhk = PublicKey::from(&alice.diffie_hellman_key);
         let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_eph);

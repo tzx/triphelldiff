@@ -1,5 +1,5 @@
-use hmac::{Hmac, Mac};
 use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -17,10 +17,7 @@ const NEXT_CHAIN_KEY_SEED: &[u8; 1] = b"\x02";
 
 impl ChainKey {
     fn from_bytes_and_index(bytes: [u8; 32], index: u64) -> Self {
-        Self {
-            key: bytes,
-            index,
-        }
+        Self { key: bytes, index }
     }
 
     fn advance(&mut self) {
@@ -34,13 +31,15 @@ impl ChainKey {
     fn get_message_key(&self) -> [u8; 32] {
         let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC can take key of any size");
         mac.update(MESSAGE_KEY_SEED);
-        mac.finalize().into_bytes().as_slice().try_into().expect("SHA256 output should return 32 bytes")
+        mac.finalize()
+            .into_bytes()
+            .as_slice()
+            .try_into()
+            .expect("SHA256 output should return 32 bytes")
     }
 
-    // TODO: Seperate Message key
-    fn encrypt(&self, plaintext: &str, associated_data) {
+    // TODO: Seperate Message key, IDK WHAT ASSOCIATED_DATA IS
+    fn encrypt(&self, plaintext: &str, associated_data: &str) {
         let message_key = self.get_message_key();
-        
-         
     }
 }

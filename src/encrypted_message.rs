@@ -13,8 +13,8 @@ type HmacSha256 = Hmac<Sha256>;
 // Reason: Only advance chain to get message keys when we receive them using chain index only.
 // We would know which chain to use since each message gives a corresponding diffie-hellman ratchet public key.
 
-struct EncryptedMessage {
-    chain_index: usize,
+pub struct EncryptedMessage {
+    chain_index: u64,
     ciphertext: Vec<u8>,
     dh_ratchet_key: PublicKey,
     mac: Vec<u8>,
@@ -27,13 +27,13 @@ impl EncryptedMessage {
     pub fn new(
         plaintext: &str,
         message_key: [u8; 32],
-        chain_index: usize,
+        chain_index: u64,
         dh_ratchet_key: PublicKey,
     ) -> Self {
         // Not providing salt is already zero-filled byte sequence
         let hk = HkdfSha256::new(None, &message_key);
         let mut okm = [0u8; 80];
-        hk.expand(HKDF_INFO, &mut okm);
+        hk.expand(HKDF_INFO, &mut okm).expect("valid length must be used");
 
         // TODO: LOL THIS CRYPTO IS TOO ADVANCED, might want a new module
         let mut encryption_key = [0u8; 32];

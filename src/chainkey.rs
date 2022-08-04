@@ -10,6 +10,8 @@ struct ChainKey {
     index: u64,
 }
 
+use crate::encrypted_message::EncryptedMessage;
+
 // Derive new key using HMAC with SHA-256 with key as HMAC key and
 // 0x01 for input for message key and 0x02 for next chain key
 const MESSAGE_KEY_SEED: &[u8; 1] = b"\x01";
@@ -38,8 +40,9 @@ impl ChainKey {
             .expect("SHA256 output should return 32 bytes")
     }
 
-    // TODO: Seperate Message key, IDK WHAT ASSOCIATED_DATA IS
-    fn encrypt(&self, plaintext: &str, associated_data: &str) {
-        let message_key = self.get_message_key();
-    }
+    // TODO: Seperate Message key
+    // fn encrypt_message(&self, plaintext: &str) -> EncryptedMessage {
+    //     let message_key = self.get_message_key();
+    //     EncryptedMessage::new(plaintext, message_key, self.index, dh_ratchet_key)
+    // }
 }

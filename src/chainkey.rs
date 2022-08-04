@@ -5,7 +5,7 @@ use sha2::Sha256;
 type HmacSha256 = Hmac<Sha256>;
 type HkdfSha256 = Hkdf<Sha256>;
 
-struct ChainKey {
+pub struct ChainKey {
     key: [u8; 32],
     index: u64,
 }

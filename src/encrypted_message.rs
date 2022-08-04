@@ -33,7 +33,8 @@ impl EncryptedMessage {
         // Not providing salt is already zero-filled byte sequence
         let hk = HkdfSha256::new(None, &message_key);
         let mut okm = [0u8; 80];
-        hk.expand(HKDF_INFO, &mut okm).expect("valid length must be used");
+        hk.expand(HKDF_INFO, &mut okm)
+            .expect("valid length must be used");
 
         // TODO: LOL THIS CRYPTO IS TOO ADVANCED, might want a new module
         let mut encryption_key = [0u8; 32];

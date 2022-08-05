@@ -76,5 +76,7 @@ impl ReceivingRatchet {
     }
 }
 
-// TODO: we probably want a Enum that alternates between the SendingRatchet and ReceivingRatchet.
-// This would be the double ratchet
+enum DoubleRatchet {
+    Sending(SendingRatchet),
+    Receiving(ReceivingRatchet),
+}

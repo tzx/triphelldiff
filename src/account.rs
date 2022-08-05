@@ -30,6 +30,12 @@ impl Account {
         self.signing_key.sign(message.as_bytes())
     }
 
+    // TODO: Session should be it's own advance type now
+    // Outbound and inbound make different ratchets
+    // It would use the DoubleRatchet type we create
+    // TODO: However, we need a message storage system to store old messages
+    // This is for skipped or out of order messages
+
     // IK_a <-> OPK_b
     // EPH_a <-> IK_b
     // EPH_a <-> OPK_b

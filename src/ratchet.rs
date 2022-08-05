@@ -76,7 +76,7 @@ impl ReceivingRatchet {
     }
 }
 
-enum DoubleRatchet {
+pub enum DoubleRatchet {
     Sending(SendingRatchet),
     Receiving(ReceivingRatchet),
 }

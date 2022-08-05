@@ -1,13 +1,20 @@
-use ed25519_dalek::{Keypair, Signature, Signer};
+use ed25519_dalek::{Keypair, Signature, Signer, PublicKey as PublicSigningKey};
 use rand::thread_rng;
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 pub struct Account {
-    signing_key: Keypair,
-    diffie_hellman_key: StaticSecret,
-    one_time_keys: Vec<StaticSecret>,
+    signing_key: PrivateIdentityKey,
+    diffie_hellman_key: PrivateDHKey,
+    one_time_keys: Vec<PrivateOneTimeKey>,
     // XXX: maybe backup key later
 }
+
+struct PrivateOneTimeKey(StaticSecret);
+struct PublicOneTimeKey(PublicKey);
+struct PrivateIdentityKey(Keypair);
+struct PublicIdentityKey(PublicSigningKey);
+struct PrivateDHKey(StaticSecret);
+struct PublicDHKey(PublicKey);
 
 const NUM_ONE_TIME_KEYS: usize = 100;
 
@@ -16,18 +23,17 @@ impl Account {
         let signing_key = Keypair::generate(&mut thread_rng());
         let diffie_hellman_key = StaticSecret::new(thread_rng());
         let one_time_keys = (0..NUM_ONE_TIME_KEYS)
-            .map(|_| StaticSecret::new(thread_rng()))
+            .map(|_| PrivateOneTimeKey(StaticSecret::new(thread_rng())))
             .collect();
-
         Account {
-            signing_key,
-            diffie_hellman_key,
+            signing_key: PrivateIdentityKey(signing_key),
+            diffie_hellman_key: PrivateDHKey(diffie_hellman_key),
             one_time_keys,
         }
     }
 
     pub fn sign(&self, message: &str) -> Signature {
-        self.signing_key.sign(message.as_bytes())
+        self.signing_key.0.sign(message.as_bytes())
     }
 
     // TODO: Session should be it's own advance type now
@@ -48,9 +54,9 @@ impl Account {
         &self,
         dh_key: PublicKey,
         one_time_key: PublicKey,
-    ) -> ([u8; 96], PublicKey) {
+    ) -> (X3DHSharedSecret, PublicKey) {
         let eph_key = StaticSecret::new(thread_rng());
-        let dh1 = self.diffie_hellman_key.diffie_hellman(&one_time_key);
+        let dh1 = self.diffie_hellman_key.0.diffie_hellman(&one_time_key);
         let dh2 = eph_key.diffie_hellman(&dh_key);
         let dh3 = eph_key.diffie_hellman(&one_time_key);
         (merge_secrets(dh1, dh2, dh3), PublicKey::from(&eph_key))
@@ -63,28 +69,31 @@ impl Account {
         used_otk: PublicKey,
         dh_key: PublicKey,
         eph_key: PublicKey,
-    ) -> [u8; 96] {
+    ) -> X3DHSharedSecret {
         // TODO: this design is very bad, probably want hashmap for the public key
-        let mut public_otks = self.one_time_keys.iter().map(|k| PublicKey::from(k));
+        let mut public_otks = self.one_time_keys.iter().map(|k| PublicKey::from(&k.0));
         // TODO: check if used_otk is even in your public key
         // TODO: you need to delete the one_time_key LOL
         let idx = public_otks.position(|k| k == used_otk).unwrap();
         let otk = &self.one_time_keys[idx];
 
-        let dh1 = otk.diffie_hellman(&dh_key);
-        let dh2 = self.diffie_hellman_key.diffie_hellman(&eph_key);
-        let dh3 = otk.diffie_hellman(&eph_key);
+        let dh1 = otk.0.diffie_hellman(&dh_key);
+        let dh2 = self.diffie_hellman_key.0.diffie_hellman(&eph_key);
+        let dh3 = otk.0.diffie_hellman(&eph_key);
         merge_secrets(dh1, dh2, dh3)
     }
 }
 
-fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSecret) -> [u8; 96] {
+#[derive(PartialEq, Eq, Debug)]
+struct X3DHSharedSecret([u8; 96]);
+
+fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSecret) -> X3DHSharedSecret {
     // Each secret is 32 bytes, so concatentating them would be 96 bytes
     let mut combined_secret = [0u8; 96];
     combined_secret[0..32].copy_from_slice(secret1.as_bytes());
     combined_secret[32..64].copy_from_slice(secret1.as_bytes());
     combined_secret[64..96].copy_from_slice(secret1.as_bytes());
-    combined_secret
+    X3DHSharedSecret(combined_secret)
 }
 
 #[cfg(test)]
@@ -98,12 +107,12 @@ mod test {
 
         // alice -> bob
         let bob_secret_otk = &bob.one_time_keys[0];
-        let bob_public_dhk = PublicKey::from(&bob.diffie_hellman_key);
-        let bob_public_otk = PublicKey::from(bob_secret_otk);
+        let bob_public_dhk = PublicKey::from(&bob.diffie_hellman_key.0);
+        let bob_public_otk = PublicKey::from(&bob_secret_otk.0);
         let (alice_ss, alice_public_eph) =
             alice.create_outbound_session(bob_public_dhk, bob_public_otk);
 
-        let alice_public_dhk = PublicKey::from(&alice.diffie_hellman_key);
+        let alice_public_dhk = PublicKey::from(&alice.diffie_hellman_key.0);
         let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_eph);
 
         assert_eq!(alice_ss, bob_ss);

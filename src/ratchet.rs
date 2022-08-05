@@ -3,7 +3,7 @@ use rand::thread_rng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::chainkey::ChainKey;
+use crate::chainkey::{ChainKey, MessageKey};
 
 const KDF_RK_INFO: &[u8] = b"KDF_RK_INFO";
 
@@ -54,7 +54,10 @@ impl SendingRatchet {
         )
     }
 
-    // TODO: advance using chain_key
+    // This advance the chain key
+    fn next_message_key(&mut self) -> MessageKey {
+        self.chain_key.next_message_key()
+    }
 }
 
 struct ReceivingRatchet {

@@ -4,6 +4,8 @@ use sha2::Sha256;
 use x25519_dalek::PublicKey;
 
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+
+use crate::chainkey::MessageKey;
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
 type HkdfSha256 = Hkdf<Sha256>;
@@ -23,15 +25,14 @@ pub struct EncryptedMessage {
 const HKDF_INFO: &[u8] = b"APPLICATION_SPECIFIC_BYTE_SEQ";
 
 impl EncryptedMessage {
-    // TODO: message_key type
     pub fn new(
         plaintext: &str,
-        message_key: [u8; 32],
+        message_key: MessageKey,
         chain_index: u64,
         dh_ratchet_key: PublicKey,
     ) -> Self {
         // Not providing salt is already zero-filled byte sequence
-        let hk = HkdfSha256::new(None, &message_key);
+        let hk = HkdfSha256::new(None, message_key.as_byte_ref());
         let mut okm = [0u8; 80];
         hk.expand(HKDF_INFO, &mut okm)
             .expect("valid length must be used");

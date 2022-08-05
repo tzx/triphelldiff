@@ -5,16 +5,23 @@ use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 pub struct Account {
     signing_key: PrivateIdentityKey,
     diffie_hellman_key: PrivateDHKey,
-    one_time_keys: Vec<PrivateOneTimeKey>,
+    one_time_keys: Vec<PrivateDHKey>,
     // XXX: maybe backup key later
 }
 
-struct PrivateOneTimeKey(StaticSecret);
-struct PublicOneTimeKey(PublicKey);
 struct PrivateIdentityKey(Keypair);
-struct PublicIdentityKey(PublicSigningKey);
+#[derive(Clone, Copy)]
+pub struct PublicIdentityKey(PublicSigningKey);
 struct PrivateDHKey(StaticSecret);
-struct PublicDHKey(PublicKey);
+#[derive(Clone, Copy)]
+pub struct PublicDHKey(PublicKey);
+
+pub struct PublicSessionKeys {
+    identity_key: PublicIdentityKey,
+    dh_key: PublicDHKey,
+    one_time_key: PublicDHKey,
+    eph_key: PublicDHKey,
+}
 
 const NUM_ONE_TIME_KEYS: usize = 100;
 
@@ -23,7 +30,7 @@ impl Account {
         let signing_key = Keypair::generate(&mut thread_rng());
         let diffie_hellman_key = StaticSecret::new(thread_rng());
         let one_time_keys = (0..NUM_ONE_TIME_KEYS)
-            .map(|_| PrivateOneTimeKey(StaticSecret::new(thread_rng())))
+            .map(|_| PrivateDHKey(StaticSecret::new(thread_rng())))
             .collect();
         Account {
             signing_key: PrivateIdentityKey(signing_key),
@@ -52,40 +59,48 @@ impl Account {
     /// create a Session given some other user's diffie_hellman_key and one-time-key
     pub fn create_outbound_session(
         &self,
-        dh_key: PublicKey,
-        one_time_key: PublicKey,
-    ) -> (X3DHSharedSecret, PublicKey) {
+        dh_key: PublicDHKey,
+        one_time_key: PublicDHKey,
+    ) -> (X3DHSharedSecret, PublicSessionKeys) {
         let eph_key = StaticSecret::new(thread_rng());
-        let dh1 = self.diffie_hellman_key.0.diffie_hellman(&one_time_key);
-        let dh2 = eph_key.diffie_hellman(&dh_key);
-        let dh3 = eph_key.diffie_hellman(&one_time_key);
-        (merge_secrets(dh1, dh2, dh3), PublicKey::from(&eph_key))
+        let dh1 = self.diffie_hellman_key.0.diffie_hellman(&one_time_key.0);
+        let dh2 = eph_key.diffie_hellman(&dh_key.0);
+        let dh3 = eph_key.diffie_hellman(&one_time_key.0);
+        let shared_secret = merge_secrets(dh1, dh2, dh3);
+        let public_session_keys = PublicSessionKeys {
+            eph_key: PublicDHKey(PublicKey::from(&eph_key)),
+            dh_key,
+            one_time_key,
+            identity_key: PublicIdentityKey(self.signing_key.0.public),
+        };
+
+        (shared_secret, public_session_keys)
     }
 
     // create inbound_session
     // needs one-time-key they used from you, their diffie-hellman key, their ephermal key
     pub fn create_inbound_session(
         &self,
-        used_otk: PublicKey,
-        dh_key: PublicKey,
-        eph_key: PublicKey,
+        used_otk: PublicDHKey,
+        dh_key: PublicDHKey,
+        eph_key: PublicDHKey,
     ) -> X3DHSharedSecret {
         // TODO: this design is very bad, probably want hashmap for the public key
         let mut public_otks = self.one_time_keys.iter().map(|k| PublicKey::from(&k.0));
         // TODO: check if used_otk is even in your public key
         // TODO: you need to delete the one_time_key LOL
-        let idx = public_otks.position(|k| k == used_otk).unwrap();
+        let idx = public_otks.position(|k| k == used_otk.0).unwrap();
         let otk = &self.one_time_keys[idx];
 
-        let dh1 = otk.0.diffie_hellman(&dh_key);
-        let dh2 = self.diffie_hellman_key.0.diffie_hellman(&eph_key);
-        let dh3 = otk.0.diffie_hellman(&eph_key);
+        let dh1 = otk.0.diffie_hellman(&dh_key.0);
+        let dh2 = self.diffie_hellman_key.0.diffie_hellman(&eph_key.0);
+        let dh3 = otk.0.diffie_hellman(&eph_key.0);
         merge_secrets(dh1, dh2, dh3)
     }
 }
 
 #[derive(PartialEq, Eq, Debug)]
-struct X3DHSharedSecret([u8; 96]);
+pub struct X3DHSharedSecret([u8; 96]);
 
 fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSecret) -> X3DHSharedSecret {
     // Each secret is 32 bytes, so concatentating them would be 96 bytes
@@ -107,13 +122,13 @@ mod test {
 
         // alice -> bob
         let bob_secret_otk = &bob.one_time_keys[0];
-        let bob_public_dhk = PublicKey::from(&bob.diffie_hellman_key.0);
-        let bob_public_otk = PublicKey::from(&bob_secret_otk.0);
-        let (alice_ss, alice_public_eph) =
+        let bob_public_dhk = PublicDHKey(PublicKey::from(&bob.diffie_hellman_key.0));
+        let bob_public_otk = PublicDHKey(PublicKey::from(&bob_secret_otk.0));
+        let (alice_ss, alice_public_session_keys) =
             alice.create_outbound_session(bob_public_dhk, bob_public_otk);
 
-        let alice_public_dhk = PublicKey::from(&alice.diffie_hellman_key.0);
-        let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_eph);
+        let alice_public_dhk = PublicDHKey(PublicKey::from(&alice.diffie_hellman_key.0));
+        let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_session_keys.dh_key);
 
         assert_eq!(alice_ss, bob_ss);
     }

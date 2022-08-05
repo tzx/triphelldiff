@@ -59,7 +59,7 @@ impl SendingRatchet {
     }
 }
 
-struct ReceivingRatchet {
+pub struct ReceivingRatchet {
     public_ratchet_key: PublicRatchetKey,
     root_key: RootKey,
 }

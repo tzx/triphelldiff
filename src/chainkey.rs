@@ -56,3 +56,12 @@ impl ChainKey {
     //     EncryptedMessage::new(plaintext, message_key, self.index, dh_ratchet_key)
     // }
 }
+
+impl From<[u8; 32]> for ChainKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self {
+            key: bytes,
+            index: 0
+        }
+    }
+}

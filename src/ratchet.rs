@@ -44,14 +44,13 @@ pub struct SendingRatchet {
 
 impl SendingRatchet {
     // Advances ratchet and returns new keys the new root key and the receving chain key
-    // TODO: we should type this
-    pub fn advance(&self, public_ratchet_key: PublicRatchetKey) -> ([u8; 32], [u8; 32]) {
-        // TODO: probably want separate types for stuff but this is (rootkey, recv_chain_key)
-        kdf(
+    pub fn advance(&self, public_ratchet_key: PublicRatchetKey) -> (RootKey, ChainKey) {
+        let (rk_bytes, ck_bytes) = kdf(
             &self.root_key,
             &self.private_ratchet_key,
             &public_ratchet_key,
-        )
+        );
+        (RootKey(rk_bytes), ck_bytes.into())
     }
 
     // This advance the chain key
@@ -69,11 +68,11 @@ struct ReceivingRatchet {
 // It then performs diffie hellman to generate that can be used for the key derivation function.
 // The ratchet can then be a SendingRatchet to send stuff
 impl ReceivingRatchet {
-    pub fn advance(&self) -> ([u8; 32], [u8; 32], PrivateRatchetKey) {
+    pub fn advance(&self) -> (RootKey, ChainKey, PrivateRatchetKey) {
         let priv_rat_key = PrivateRatchetKey::new();
         let (new_root_key, sending_chain_key) =
             kdf(&self.root_key, &priv_rat_key, &self.public_ratchet_key);
-        (new_root_key, sending_chain_key, priv_rat_key)
+        (RootKey(new_root_key), sending_chain_key.into(), priv_rat_key)
     }
 }
 

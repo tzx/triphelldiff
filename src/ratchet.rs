@@ -3,13 +3,13 @@ use rand::thread_rng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::chainkey::{ChainKey, MessageKey};
+use crate::{chainkey::{ChainKey, MessageKey}, account::X3DHSharedSecret};
 
 const KDF_RK_INFO: &[u8] = b"KDF_RK_INFO";
 
 pub struct PrivateRatchetKey(StaticSecret);
 pub struct PublicRatchetKey(PublicKey);
-pub struct RootKey([u8; 32]);
+pub struct RootKey(pub [u8; 32]);
 
 impl PrivateRatchetKey {
     fn new() -> Self {
@@ -76,7 +76,36 @@ impl ReceivingRatchet {
     }
 }
 
-pub enum DoubleRatchet {
+enum DoubleRatchetState {
     Sending(SendingRatchet),
     Receiving(ReceivingRatchet),
+}
+
+pub struct DoubleRatchet {
+    inner: DoubleRatchetState
+}
+
+impl DoubleRatchet {
+    pub fn new_sending_ratchet(shared_secret: X3DHSharedSecret) -> Self {
+        // Shared Secret needs to be put into a kdf to output the root key and chain key
+        // Signal docs says SK should be salt? Idk
+        let hkdf = Hkdf::<Sha256>::new(None, shared_secret.as_byte_ref());
+        let mut okm = [0u8; 64];
+        hkdf.expand(b"NEW_INBOUND_SESSION", &mut okm);
+
+        let mut root_key_bytes = [0u8; 32];
+        let mut chain_key_bytes = [0u8; 32];
+        root_key_bytes.copy_from_slice(&okm[..32]);
+        chain_key_bytes.copy_from_slice(&okm[32..64]);
+        let root_key =  RootKey(root_key_bytes);
+        let chain_key = ChainKey::from(chain_key_bytes);
+        let ratchet = SendingRatchet {
+            private_ratchet_key: PrivateRatchetKey::new(),
+            root_key,
+            chain_key
+        };
+        Self {
+            inner: DoubleRatchetState::Sending(ratchet)
+        }
+    }
 }

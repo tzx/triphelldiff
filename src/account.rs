@@ -2,6 +2,8 @@ use ed25519_dalek::{Keypair, Signature, Signer, PublicKey as PublicSigningKey};
 use rand::thread_rng;
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
+use crate::session::Session;
+
 pub struct Account {
     signing_key: PrivateIdentityKey,
     diffie_hellman_key: PrivateDHKey,
@@ -61,7 +63,7 @@ impl Account {
         &self,
         dh_key: PublicDHKey,
         one_time_key: PublicDHKey,
-    ) -> (X3DHSharedSecret, PublicSessionKeys) {
+    ) -> Session {
         let eph_key = StaticSecret::new(thread_rng());
         let dh1 = self.diffie_hellman_key.0.diffie_hellman(&one_time_key.0);
         let dh2 = eph_key.diffie_hellman(&dh_key.0);
@@ -74,7 +76,7 @@ impl Account {
             identity_key: PublicIdentityKey(self.signing_key.0.public),
         };
 
-        (shared_secret, public_session_keys)
+        Session::new_outbound_session(shared_secret, public_session_keys)
     }
 
     // create inbound_session
@@ -101,6 +103,12 @@ impl Account {
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct X3DHSharedSecret([u8; 96]);
+
+impl X3DHSharedSecret {
+    pub fn as_byte_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSecret) -> X3DHSharedSecret {
     // Each secret is 32 bytes, so concatentating them would be 96 bytes

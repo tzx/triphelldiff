@@ -3,7 +3,7 @@ use rand::thread_rng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::{chainkey::{ChainKey, MessageKey}, account::X3DHSharedSecret};
+use crate::{chainkey::{ChainKey, MessageKey}, account::{X3DHSharedSecret, PublicSessionKeys}};
 
 const KDF_RK_INFO: &[u8] = b"KDF_RK_INFO";
 
@@ -37,6 +37,7 @@ fn kdf(
 }
 
 pub struct SendingRatchet {
+    // This ratchet key is used to advance when it receives a public ratchet key
     private_ratchet_key: PrivateRatchetKey,
     root_key: RootKey,
     chain_key: ChainKey,
@@ -85,20 +86,25 @@ pub struct DoubleRatchet {
     inner: DoubleRatchetState
 }
 
+fn new_ratchet_kdf(shared_secret: X3DHSharedSecret) -> (RootKey, ChainKey) {
+    let hkdf = Hkdf::<Sha256>::new(None, shared_secret.as_byte_ref());
+    let mut okm = [0u8; 64];
+    hkdf.expand(b"NEW_SESSION", &mut okm);
+
+    let mut root_key_bytes = [0u8; 32];
+    let mut chain_key_bytes = [0u8; 32];
+    root_key_bytes.copy_from_slice(&okm[..32]);
+    chain_key_bytes.copy_from_slice(&okm[32..64]);
+    let root_key =  RootKey(root_key_bytes);
+    let chain_key = ChainKey::from(chain_key_bytes);
+    (root_key, chain_key)
+}
+
 impl DoubleRatchet {
     pub fn new_sending_ratchet(shared_secret: X3DHSharedSecret) -> Self {
         // Shared Secret needs to be put into a kdf to output the root key and chain key
         // Signal docs says SK should be salt? Idk
-        let hkdf = Hkdf::<Sha256>::new(None, shared_secret.as_byte_ref());
-        let mut okm = [0u8; 64];
-        hkdf.expand(b"NEW_INBOUND_SESSION", &mut okm);
-
-        let mut root_key_bytes = [0u8; 32];
-        let mut chain_key_bytes = [0u8; 32];
-        root_key_bytes.copy_from_slice(&okm[..32]);
-        chain_key_bytes.copy_from_slice(&okm[32..64]);
-        let root_key =  RootKey(root_key_bytes);
-        let chain_key = ChainKey::from(chain_key_bytes);
+        let (root_key, chain_key) = new_ratchet_kdf(shared_secret);
         let ratchet = SendingRatchet {
             private_ratchet_key: PrivateRatchetKey::new(),
             root_key,
@@ -106,6 +112,19 @@ impl DoubleRatchet {
         };
         Self {
             inner: DoubleRatchetState::Sending(ratchet)
+        }
+    }
+
+    pub fn new_receiving_ratchet(shared_secret: X3DHSharedSecret, pub_session_keys: &PublicSessionKeys) -> Self {
+        // get same_root_key and chain_key from above
+        // TODO: store this chainkey is for chainkey stores for skipped messages
+        let (root_key, _chainkey) = new_ratchet_kdf(shared_secret);
+        let ratchet = ReceivingRatchet {
+            root_key,
+            public_ratchet_key: PublicRatchetKey(pub_session_keys.eph_key.0),
+        };
+        Self {
+            inner: DoubleRatchetState::Receiving(ratchet),
         }
     }
 }

@@ -17,4 +17,13 @@ impl Session {
             public_keys
         }
     }
+
+    pub fn new_inbound_session(shared_secret: X3DHSharedSecret, public_keys: PublicSessionKeys) -> Self {
+        let double_ratchet = DoubleRatchet::new_receiving_ratchet(shared_secret, &public_keys);
+
+        Self {
+            double_ratchet,
+            public_keys
+        }
+    }
 }

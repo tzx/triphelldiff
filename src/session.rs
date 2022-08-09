@@ -1,5 +1,7 @@
 use crate::account::PublicSessionKeys;
 use crate::account::X3DHSharedSecret;
+use crate::encrypted_message::InitialMessage;
+use crate::encrypted_message::Message;
 use crate::ratchet::DoubleRatchet;
 
 pub struct Session {
@@ -25,5 +27,12 @@ impl Session {
             double_ratchet,
             public_keys
         }
+    }
+
+    pub fn encrypt(&mut self, message: &str) -> Message {
+        // TODO: right now this is only initial message
+        let encrypted_message = self.double_ratchet.encrypt(message);
+        let initial_message = InitialMessage::new(self.public_keys, encrypted_message);
+        Message::Initial(initial_message)
     }
 }

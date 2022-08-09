@@ -10,6 +10,12 @@ pub struct ChainKey {
     index: u64,
 }
 
+impl ChainKey {
+    pub fn index(&self) -> u64 {
+        self.index
+    }
+}
+
 pub struct MessageKey([u8; 32]);
 
 impl MessageKey {

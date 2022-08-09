@@ -3,17 +3,24 @@ use rand::thread_rng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::{chainkey::{ChainKey, MessageKey}, account::{X3DHSharedSecret, PublicSessionKeys}};
+use crate::{chainkey::{ChainKey, MessageKey}, account::{X3DHSharedSecret, PublicSessionKeys}, encrypted_message::EncryptedMessage};
 
 const KDF_RK_INFO: &[u8] = b"KDF_RK_INFO";
 
 pub struct PrivateRatchetKey(StaticSecret);
-pub struct PublicRatchetKey(PublicKey);
-pub struct RootKey(pub [u8; 32]);
+pub struct PublicRatchetKey(pub(crate) PublicKey);
+pub struct RootKey(pub(crate) [u8; 32]);
 
 impl PrivateRatchetKey {
     fn new() -> Self {
         PrivateRatchetKey(StaticSecret::new(thread_rng()))
+    }
+}
+
+impl PublicRatchetKey {
+    fn from(priv_key: &PrivateRatchetKey) -> Self {
+        let pubkey = PublicKey::from(&priv_key.0);
+        PublicRatchetKey(pubkey)
     }
 }
 // Uses kdf to get 64 bytes, splits them into two 32 byte keys: new_root_key, new_chain_key
@@ -101,6 +108,24 @@ fn new_ratchet_kdf(shared_secret: X3DHSharedSecret) -> (RootKey, ChainKey) {
 }
 
 impl DoubleRatchet {
+    pub fn encrypt(&mut self, msg: &str) -> EncryptedMessage {
+        match &mut self.inner {
+            DoubleRatchetState::Sending(ratchet) => {
+                let chain_index = ratchet.chain_key.index();
+                let msg_key = ratchet.next_message_key();
+                let ratchet_key = PublicRatchetKey::from(&ratchet.private_ratchet_key);
+                let encrypted_msg = EncryptedMessage::new(
+                    msg,
+                    msg_key,
+                    chain_index,
+                    ratchet_key
+                );
+                encrypted_msg
+            }
+            DoubleRatchetState::Receiving(_) => todo!("not done")
+        }
+    }
+
     pub fn new_sending_ratchet(shared_secret: X3DHSharedSecret) -> Self {
         // Shared Secret needs to be put into a kdf to output the root key and chain key
         // Signal docs says SK should be salt? Idk

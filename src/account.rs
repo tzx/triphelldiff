@@ -18,6 +18,7 @@ struct PrivateDHKey(StaticSecret);
 #[derive(Clone, Copy)]
 pub struct PublicDHKey(pub(crate) PublicKey);
 
+#[derive(Clone, Copy)]
 pub struct PublicSessionKeys {
     identity_key: PublicIdentityKey,
     dh_key: PublicDHKey,

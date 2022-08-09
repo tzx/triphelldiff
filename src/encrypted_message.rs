@@ -5,7 +5,7 @@ use x25519_dalek::PublicKey;
 
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 
-use crate::chainkey::MessageKey;
+use crate::{chainkey::MessageKey, account::PublicSessionKeys, ratchet::PublicRatchetKey};
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
 type HkdfSha256 = Hkdf<Sha256>;
@@ -18,18 +18,38 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct EncryptedMessage {
     chain_index: u64,
     ciphertext: Vec<u8>,
-    dh_ratchet_key: PublicKey,
+    dh_ratchet_key: PublicRatchetKey,
     mac: Vec<u8>,
 }
 
+// Message sent before any conversation has even started
+pub struct InitialMessage {
+    pub_session_keys: PublicSessionKeys,
+    message: EncryptedMessage,
+}
+
+pub enum Message {
+    Initial(InitialMessage),
+    Normal(EncryptedMessage),
+}
+
 const HKDF_INFO: &[u8] = b"APPLICATION_SPECIFIC_BYTE_SEQ";
+
+impl InitialMessage {
+    pub fn new(pub_session_keys: PublicSessionKeys, message: EncryptedMessage) -> Self {
+        Self {
+            pub_session_keys,
+            message,
+        }
+    }
+}
 
 impl EncryptedMessage {
     pub fn new(
         plaintext: &str,
         message_key: MessageKey,
         chain_index: u64,
-        dh_ratchet_key: PublicKey,
+        dh_ratchet_key: PublicRatchetKey,
     ) -> Self {
         // Not providing salt is already zero-filled byte sequence
         let hk = HkdfSha256::new(None, message_key.as_byte_ref());
@@ -51,7 +71,7 @@ impl EncryptedMessage {
         // Right now associated data is just chain_index and public ratchet_key
         let hmac_input = [
             chain_index.to_be_bytes().as_ref(),
-            &dh_ratchet_key.to_bytes(),
+            &dh_ratchet_key.0.to_bytes(),
             &ciphertext,
         ]
         .concat();

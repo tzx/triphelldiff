@@ -47,7 +47,8 @@ impl ChainKey {
     pub fn next_message_key(&mut self) -> MessageKey {
         let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC can take key of any size");
         mac.update(MESSAGE_KEY_SEED);
-        let bytes: [u8; 32] = mac.finalize()
+        let bytes: [u8; 32] = mac
+            .finalize()
             .into_bytes()
             .as_slice()
             .try_into()
@@ -67,7 +68,7 @@ impl From<[u8; 32]> for ChainKey {
     fn from(bytes: [u8; 32]) -> Self {
         Self {
             key: bytes,
-            index: 0
+            index: 0,
         }
     }
 }

@@ -3,7 +3,11 @@ use rand::thread_rng;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crate::{chainkey::{ChainKey, MessageKey}, account::{X3DHSharedSecret, PublicSessionKeys}, encrypted_message::EncryptedMessage};
+use crate::{
+    account::{PublicSessionKeys, X3DHSharedSecret},
+    chainkey::{ChainKey, MessageKey},
+    encrypted_message::EncryptedMessage,
+};
 
 const KDF_RK_INFO: &[u8] = b"KDF_RK_INFO";
 
@@ -80,7 +84,11 @@ impl ReceivingRatchet {
         let priv_rat_key = PrivateRatchetKey::new();
         let (new_root_key, sending_chain_key) =
             kdf(&self.root_key, &priv_rat_key, &self.public_ratchet_key);
-        (RootKey(new_root_key), sending_chain_key.into(), priv_rat_key)
+        (
+            RootKey(new_root_key),
+            sending_chain_key.into(),
+            priv_rat_key,
+        )
     }
 }
 
@@ -90,7 +98,7 @@ enum DoubleRatchetState {
 }
 
 pub struct DoubleRatchet {
-    inner: DoubleRatchetState
+    inner: DoubleRatchetState,
 }
 
 fn new_ratchet_kdf(shared_secret: X3DHSharedSecret) -> (RootKey, ChainKey) {
@@ -102,7 +110,7 @@ fn new_ratchet_kdf(shared_secret: X3DHSharedSecret) -> (RootKey, ChainKey) {
     let mut chain_key_bytes = [0u8; 32];
     root_key_bytes.copy_from_slice(&okm[..32]);
     chain_key_bytes.copy_from_slice(&okm[32..64]);
-    let root_key =  RootKey(root_key_bytes);
+    let root_key = RootKey(root_key_bytes);
     let chain_key = ChainKey::from(chain_key_bytes);
     (root_key, chain_key)
 }
@@ -114,15 +122,10 @@ impl DoubleRatchet {
                 let chain_index = ratchet.chain_key.index();
                 let msg_key = ratchet.next_message_key();
                 let ratchet_key = PublicRatchetKey::from(&ratchet.private_ratchet_key);
-                let encrypted_msg = EncryptedMessage::new(
-                    msg,
-                    msg_key,
-                    chain_index,
-                    ratchet_key
-                );
+                let encrypted_msg = EncryptedMessage::new(msg, msg_key, chain_index, ratchet_key);
                 encrypted_msg
             }
-            DoubleRatchetState::Receiving(_) => todo!("not done")
+            DoubleRatchetState::Receiving(_) => todo!("not done"),
         }
     }
 
@@ -133,14 +136,17 @@ impl DoubleRatchet {
         let ratchet = SendingRatchet {
             private_ratchet_key: PrivateRatchetKey::new(),
             root_key,
-            chain_key
+            chain_key,
         };
         Self {
-            inner: DoubleRatchetState::Sending(ratchet)
+            inner: DoubleRatchetState::Sending(ratchet),
         }
     }
 
-    pub fn new_receiving_ratchet(shared_secret: X3DHSharedSecret, pub_session_keys: &PublicSessionKeys) -> Self {
+    pub fn new_receiving_ratchet(
+        shared_secret: X3DHSharedSecret,
+        pub_session_keys: &PublicSessionKeys,
+    ) -> Self {
         // get same_root_key and chain_key from above
         // TODO: store this chainkey is for chainkey stores for skipped messages
         let (root_key, _chainkey) = new_ratchet_kdf(shared_secret);

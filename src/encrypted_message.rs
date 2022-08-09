@@ -5,7 +5,7 @@ use x25519_dalek::PublicKey;
 
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 
-use crate::{chainkey::MessageKey, account::PublicSessionKeys, ratchet::PublicRatchetKey};
+use crate::{account::PublicSessionKeys, chainkey::MessageKey, ratchet::PublicRatchetKey};
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
 type HkdfSha256 = Hkdf<Sha256>;

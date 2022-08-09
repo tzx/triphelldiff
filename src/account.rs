@@ -1,4 +1,4 @@
-use ed25519_dalek::{Keypair, Signature, Signer, PublicKey as PublicSigningKey};
+use ed25519_dalek::{Keypair, PublicKey as PublicSigningKey, Signature, Signer};
 use rand::thread_rng;
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
@@ -121,7 +121,11 @@ impl X3DHSharedSecret {
     }
 }
 
-fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSecret) -> X3DHSharedSecret {
+fn merge_secrets(
+    secret1: SharedSecret,
+    secret2: SharedSecret,
+    secret3: SharedSecret,
+) -> X3DHSharedSecret {
     // Each secret is 32 bytes, so concatentating them would be 96 bytes
     let mut combined_secret = [0u8; 96];
     combined_secret[0..32].copy_from_slice(secret1.as_bytes());
@@ -134,22 +138,22 @@ fn merge_secrets(secret1: SharedSecret, secret2: SharedSecret, secret3: SharedSe
 // #[cfg(test)]
 // mod test {
 //     use super::*;
-// 
+//
 //     #[test]
 //     fn same_secrets() {
 //         let alice = Account::new();
 //         let bob = Account::new();
-// 
+//
 //         // alice -> bob
 //         let bob_secret_otk = &bob.one_time_keys[0];
 //         let bob_public_dhk = PublicDHKey(PublicKey::from(&bob.diffie_hellman_key.0));
 //         let bob_public_otk = PublicDHKey(PublicKey::from(&bob_secret_otk.0));
 //         let (alice_ss, alice_public_session_keys) =
 //             alice.create_outbound_session(bob_public_dhk, bob_public_otk);
-// 
+//
 //         let alice_public_dhk = PublicDHKey(PublicKey::from(&alice.diffie_hellman_key.0));
 //         let bob_ss = bob.create_inbound_session(bob_public_otk, alice_public_dhk, alice_public_session_keys.dh_key);
-// 
+//
 //         assert_eq!(alice_ss, bob_ss);
 //     }
 // }

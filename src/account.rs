@@ -12,17 +12,17 @@ pub struct Account {
 }
 
 struct PrivateIdentityKey(Keypair);
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PublicIdentityKey(PublicSigningKey);
 struct PrivateDHKey(StaticSecret);
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PublicDHKey(pub(crate) PublicKey);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PublicSessionKeys {
-    identity_key: PublicIdentityKey,
-    dh_key: PublicDHKey,
-    one_time_key: PublicDHKey,
+    pub(crate) identity_key: PublicIdentityKey,
+    pub(crate) dh_key: PublicDHKey,
+    pub(crate) one_time_key: PublicDHKey,
     pub(crate) eph_key: PublicDHKey,
 }
 
@@ -132,6 +132,32 @@ fn merge_secrets(
     combined_secret[32..64].copy_from_slice(secret1.as_bytes());
     combined_secret[64..96].copy_from_slice(secret1.as_bytes());
     X3DHSharedSecret(combined_secret)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn same_secret() {
+        let alice = Account::new();
+        let bob = Account::new();
+
+        let bob_secret_otk = &bob.one_time_keys[0];
+        let bob_public_dhk = PublicDHKey(PublicKey::from(&bob.diffie_hellman_key.0));
+        let bob_public_otk = PublicDHKey(PublicKey::from(&bob_secret_otk.0));
+
+        let outbound_session = alice.create_outbound_session(bob_public_dhk, bob_public_otk);
+        let alice_public_session_keys = outbound_session.public_keys();
+        let inbound_session = bob.create_inbound_session(
+            alice_public_session_keys.one_time_key,
+            alice_public_session_keys.dh_key,
+            alice_public_session_keys.eph_key,
+            alice_public_session_keys.identity_key,
+        );
+        let bob_public_session_keys = inbound_session.public_keys();
+        assert_eq!(alice_public_session_keys, bob_public_session_keys);
+    }
 }
 
 // TODO: move tests to sessions and then compare sessions

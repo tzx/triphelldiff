@@ -11,6 +11,10 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn public_keys(&self) -> &PublicSessionKeys {
+        &self.public_keys
+    }
+
     pub fn new_outbound_session(
         shared_secret: X3DHSharedSecret,
         public_keys: PublicSessionKeys,
